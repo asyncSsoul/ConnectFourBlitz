@@ -22,13 +22,13 @@ public class GameRestController {
         this.messagingTemplate = messagingTemplate;
     }
 
-    @PostMapping("/create")
+    @PostMapping({"/create", "/create/"})
     public ResponseEntity<GameSession> createRoom(@RequestBody CreateRoomRequest request) {
         GameSession session = gameService.createGame(request.playerId());
         return ResponseEntity.ok(session);
     }
 
-    @PostMapping("/join")
+    @PostMapping({"/join", "/join/"})
     public ResponseEntity<GameSession> joinRoom(@RequestBody JoinRoomRequest request) {
         GameSession session = gameService.joinGame(request.gameId(), request.playerId());
 

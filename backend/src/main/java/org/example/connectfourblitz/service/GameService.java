@@ -1,5 +1,6 @@
 package org.example.connectfourblitz.service;
 
+import lombok.extern.slf4j.Slf4j;
 import org.example.connectfourblitz.model.GameSession;
 import org.springframework.stereotype.Service;
 
@@ -7,6 +8,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
+@Slf4j
 public class GameService {
 
     // Хранилище сессий в RAM (in-memory)
@@ -26,6 +28,7 @@ public class GameService {
     public GameSession createGame(String playerId) {
         GameSession session = new GameSession(playerId);
         games.put(session.getId(), session);
+        log.info("Создана новая игра. ID: {}, Игрок 1: {}", session.getId(), playerId);
         return session;
     }
 
@@ -35,6 +38,7 @@ public class GameService {
     public GameSession joinGame(String gameId, String playerId) {
         GameSession session = games.get(gameId);
         if (session == null) {
+            log.error("Попытка подключения к несуществующей игре с ID: {}", gameId);
             throw new IllegalArgumentException("Игра с ID " + gameId + " не найдена");
         }
 
@@ -42,6 +46,9 @@ public class GameService {
         if ("WAITING".equals(session.getStatus()) && !session.getPlayer1Id().equals(playerId)) {
             session.setPlayer2Id(playerId);
             session.setStatus("PLAYING");
+            log.info("Игрок 2 [{}] успешно подключился к игре {}. Статус игры: PLAYING", playerId, gameId);
+        } else {
+            log.warn("Не удалось подключить игрока {} к игре {}. Текущий статус: {}", playerId, gameId, session.getStatus());
         }
         return session;
     }
@@ -50,51 +57,82 @@ public class GameService {
      * Обработка хода игрока.
      */
     public GameSession makeMove(String gameId, String playerId, int col) {
+        log.info("");
+        log.info("=== [ВХОДЯЩИЙ ХОД] ===");
+        log.info("ID игры: {}", gameId);
+        log.info("Кто пытается ходить (playerId из сокета): [{}]", playerId);
+
         GameSession session = games.get(gameId);
 
-        // 1. Проверяем, существует ли игра, активна ли она
-        if (session == null || session.isGameOver() || !"PLAYING".equals(session.getStatus())) {
+        if (session == null) {
+            log.warn("[ОТКЛОНЕНО]: Сессия игры не найдена в RAM для ID: {}", gameId);
+            return null;
+        }
+
+        log.info("Текущий статус игры: {}", session.getStatus());
+        log.info("Игрок 1 в сессии (создатель): [{}]", session.getPlayer1Id());
+        log.info("Игрок 2 в сессии (соперник): [{}]", session.getPlayer2Id());
+        log.info("Чей сейчас ход по логике бэка (currentTurn): {}", session.getCurrentTurn());
+
+        // 1. Проверяем статус игры
+        if (session.isGameOver() || !"PLAYING".equals(session.getStatus())) {
+            log.warn("[ОТКЛОНЕНО]: Игра завершена или статус не PLAYING (сейчас: {})", session.getStatus());
             return session;
         }
 
-        // 2. Валидация корректности колонки (индексы от 0 до 6)
+        if (session.getPlayer2Id() == null) {
+            log.warn("[ОТКЛОНЕНО]: Игрок 2 ещё не подключился (null)!");
+            return session;
+        }
+
+        // 2. Валидация колонки
         if (col < 0 || col > 6) {
+            log.warn("[ОТКЛОНЕНО]: Неверный индекс колонки: {}", col);
             return session;
         }
 
         int[][] grid = session.getBoard().getGrid();
 
-        // 3. Валидация на переполнение колонки (если верхняя ячейка уже занята)
+        // 3. Валидация на переполнение колонки
         if (grid[0][col] != 0) {
+            log.warn("[ОТКЛОНЕНО]: Колонка {} уже заполнена!", col);
             return session;
         }
 
-        // 4. Проверяем, чей сейчас ход согласно логике бэкенда и фронтенда
+        // 4. Проверяем, чей сейчас ход
         boolean isPlayer1 = playerId.equals(session.getPlayer1Id());
         boolean isPlayer2 = playerId.equals(session.getPlayer2Id());
 
+        log.info("Проверка совпадения ID:");
+        log.info("- Это Игрок 1? -> {}", isPlayer1);
+        log.info("- Это Игрок 2? -> {}", isPlayer2);
+
         if ((session.getCurrentTurn() == 1 && !isPlayer1) || (session.getCurrentTurn() == 2 && !isPlayer2)) {
-            return session; // Ход не текущего игрока, игнорируем запрос
+            log.warn("[ОТКЛОНЕНО]: Нарушена очерёдность хода! Ходить должен другой игрок.");
+            return session;
         }
 
         int playerMark = session.getCurrentTurn();
+        log.info("[УСПЕХ]: Проверки пройдены. Фишка игрока {} падает в колонку {}", playerMark, col);
 
-        // 5. Логика Connect 4: ищем самую нижнюю пустую ячейку (0) в выбранной колонке
+        // 5. Логика Connect 4
         for (int row = 5; row >= 0; row--) {
             if (grid[row][col] == 0) {
                 grid[row][col] = playerMark;
-
-                // Проверяем, привел ли этот ход к завершению игры (победа или ничья)
                 checkWinCondition(session, playerMark);
 
-                // Если игра НЕ завершена, передаем ход следующему игроку
                 if (!session.isGameOver()) {
                     session.setCurrentTurn(playerMark == 1 ? 2 : 1);
+                    log.info("Ход перешёл к Игроку {}", session.getCurrentTurn());
+                } else {
+                    log.info("Игра ОКОНЧЕНА! Статус: {}, Победитель: {}", session.getStatus(), session.getWinnerId());
                 }
                 break;
             }
         }
 
+        log.info("=== [КОНЕЦ ОБРАБОТКИ ХОДА] ===");
+        log.info("");
         return session;
     }
 
@@ -107,7 +145,6 @@ public class GameService {
         // 1. Поиск четырех фишек в ряд по всей сетке 6x7
         for (int r = 0; r < 6; r++) {
             for (int c = 0; c < 7; c++) {
-                // Если ячейка не принадлежит текущему игроку, проверять от неё ряды нет смысла
                 if (grid[r][c] != playerMark) continue;
 
                 // Горизонталь вправо
@@ -146,6 +183,7 @@ public class GameService {
             session.setGameOver(true);
             session.setStatus("FINISHED");
             session.setWinnerId("DRAW");
+            log.info("Зафиксирована НИЧЬЯ в игре {}", session.getId());
         }
     }
 
@@ -155,6 +193,8 @@ public class GameService {
     private void setWinner(GameSession session, int playerMark) {
         session.setGameOver(true);
         session.setStatus("FINISHED");
-        session.setWinnerId(playerMark == 1 ? session.getPlayer1Id() : session.getPlayer2Id());
+        String winnerId = (playerMark == 1) ? session.getPlayer1Id() : session.getPlayer2Id();
+        session.setWinnerId(winnerId);
+        log.info("Определен победитель матча! Игра: {}, Выиграл игрок (марк {}): {}", session.getId(), playerMark, winnerId);
     }
 }

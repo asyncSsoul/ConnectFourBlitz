@@ -25,8 +25,7 @@ export interface GameSession {
 export type View = "dashboard" | "game" | "shop"
 export type Difficulty = "easy" | "medium" | "hardcore"
 export type GameMode = "ai" | "online" | "local"
-
-const BACKEND_URL = "http://localhost:8085" // Укажите порт вашего Spring Boot
+const BACKEND_URL = "http://localhost:8085"; // Укажите порт вашего Spring Boot
 
 export default function Home() {
   const [currentView, setCurrentView] = useState<View>("dashboard")

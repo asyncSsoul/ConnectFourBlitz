@@ -1,0 +1,25 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: connect4-backend
+    ports:
+      - "8085:8080" # Внешний порт 8085 -> внутренний 8080
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: connect4-frontend
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=development
+      - HOST=0.0.0.0
+      - NEXT_PUBLIC_BACKEND_URL=http://localhost:8085
+    volumes:
+      - ./frontend:/app             # Монтируем код для Live Reload
+      - /app/node_modules           # Исключаем локальную node_modules из монтирования

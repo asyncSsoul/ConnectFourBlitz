@@ -5,9 +5,10 @@ services:
       dockerfile: Dockerfile
     container_name: connect4-backend
     ports:
-      - "8085:8080" # Внешний порт 8085 -> внутренний 8080
+      - "8085:8085" # Внешний порт 8085 -> Внутренний 8085
     environment:
       - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=8085 # <--- ЭТА СТРОКА ЗАСТАВИТ SPRING СЛУШАТЬ 8085
 
   frontend:
     build:

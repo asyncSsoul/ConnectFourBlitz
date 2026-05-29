@@ -14,8 +14,8 @@ public class CorsConfig {
     public CorsFilter corsFilter() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowCredentials(true);
-        config.addAllowedOrigin("http://localhost:3001");
-        config.addAllowedOrigin("http://127.0.0.1:3001");
+        config.addAllowedOrigin("http://localhost:3000");
+        config.addAllowedOrigin("http://127.0.0.1:3000");
         config.addAllowedHeader("*");
         config.addAllowedMethod("*");
 
